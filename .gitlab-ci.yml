@@ -22,14 +22,13 @@ build-and-push:
   services:
     - name: docker:27.5.1-dind
       alias: docker
-      command: ["--insecure-registry=nexus:8089"]
   script:
-    - ': "${NEXUS_REGISTRY:?Set NEXUS_REGISTRY in GitLab CI/CD variables (host:port)}"'
-    - ': "${NEXUS_USERNAME:?Set NEXUS_USERNAME in GitLab CI/CD variables}"'
-    - ': "${NEXUS_PASSWORD:?Set NEXUS_PASSWORD in GitLab CI/CD variables}"'
-    - echo "$NEXUS_PASSWORD" | docker login "$NEXUS_REGISTRY" --username "$NEXUS_USERNAME" --password-stdin
-    - docker build --pull --build-arg PIP_INDEX_URL="$PIP_INDEX_URL" --tag "$NEXUS_REGISTRY/marketmate:$CI_COMMIT_SHORT_SHA" --tag "$NEXUS_REGISTRY/marketmate:$CI_COMMIT_REF_SLUG" .
-    - docker push "$NEXUS_REGISTRY/marketmate:$CI_COMMIT_SHORT_SHA"
-    - docker push "$NEXUS_REGISTRY/marketmate:$CI_COMMIT_REF_SLUG"
+    - ': "${DOCKERHUB_USERNAME:?Set DOCKERHUB_USERNAME in GitLab CI/CD variables}"'
+    - ': "${DOCKERHUB_TOKEN:?Set DOCKERHUB_TOKEN in GitLab CI/CD variables}"'
+    - ': "${DOCKERHUB_IMAGE:?Set DOCKERHUB_IMAGE as namespace/repository in GitLab CI/CD variables}"'
+    - echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+    - docker build --pull --build-arg PIP_INDEX_URL="$PIP_INDEX_URL" --tag "$DOCKERHUB_IMAGE:$CI_COMMIT_SHORT_SHA" --tag "$DOCKERHUB_IMAGE:$CI_COMMIT_REF_SLUG" .
+    - docker push "$DOCKERHUB_IMAGE:$CI_COMMIT_SHORT_SHA"
+    - docker push "$DOCKERHUB_IMAGE:$CI_COMMIT_REF_SLUG"
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
