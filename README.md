@@ -67,3 +67,16 @@ Prometheus scrapes the app's `/metrics` endpoint. Grafana is provisioned with Pr
 - Prometheus and Grafana data use named volumes. Back up those volumes before host maintenance, and verify the previous image tag is available before deploying a release.
 
 See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for the Nginx 502 investigation steps.
+
+## Optional Kubernetes manifests
+
+The `k8s/` directory contains a Namespace, Deployment, internal ClusterIP Service, CPU-based HPA, and ResourceQuota. Before applying, change the image in `k8s/deployment.yaml` to your Docker Hub repository and a tag that exists. The HPA needs Metrics Server installed in the cluster. The quota is for a dedicated `marketmate` namespace and should be adjusted to the cluster's available capacity.
+
+```bash
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/
+kubectl -n marketmate get deployments,services,hpa,resourcequota
+kubectl -n marketmate port-forward service/marketmate 8000:80
+```
+
+Then open `http://localhost:8000/health`. If the Docker Hub repository is private, create an image pull secret in the `marketmate` namespace and reference it from the Deployment before applying.

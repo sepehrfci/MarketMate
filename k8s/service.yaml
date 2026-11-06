@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: marketmate
+  namespace: marketmate
+  labels:
+    app.kubernetes.io/name: marketmate
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: marketmate
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
