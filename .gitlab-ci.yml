@@ -1,0 +1,31 @@
+stages:
+  - test
+  - build
+
+variables:
+  PIP_INDEX_URL: "https://pypi.org/simple"
+  DOCKER_HOST: "tcp://docker:2376"
+  DOCKER_TLS_CERTDIR: "/certs"
+  DOCKER_TLS_VERIFY: "1"
+  DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+
+test:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - python -m pip install --no-cache-dir -r requirements-dev.txt
+    - python -m pytest -q
+
+build-and-push:
+  stage: build
+  image: docker:27.5.1-cli
+  services:
+    - name: docker:27.5.1-dind
+      alias: docker
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" --username "$CI_REGISTRY_USER" --password-stdin
+    - docker build --pull --build-arg PIP_INDEX_URL="$PIP_INDEX_URL" --tag "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA" --tag "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG" .
+    - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+    - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
