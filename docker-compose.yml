@@ -1,0 +1,25 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple/}
+    image: marketmate:local
+    ports:
+      - "8000:8000"
+    environment:
+      APP_NAME: ${APP_NAME:-MarketMate}
+      APP_ENV: ${APP_ENV:-development}
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.5
