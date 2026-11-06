@@ -22,10 +22,14 @@ build-and-push:
   services:
     - name: docker:27.5.1-dind
       alias: docker
+      command: ["--insecure-registry=nexus:8089"]
   script:
-    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" --username "$CI_REGISTRY_USER" --password-stdin
-    - docker build --pull --build-arg PIP_INDEX_URL="$PIP_INDEX_URL" --tag "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA" --tag "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG" .
-    - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
-    - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG"
+    - ': "${NEXUS_REGISTRY:?Set NEXUS_REGISTRY in GitLab CI/CD variables (host:port)}"'
+    - ': "${NEXUS_USERNAME:?Set NEXUS_USERNAME in GitLab CI/CD variables}"'
+    - ': "${NEXUS_PASSWORD:?Set NEXUS_PASSWORD in GitLab CI/CD variables}"'
+    - echo "$NEXUS_PASSWORD" | docker login "$NEXUS_REGISTRY" --username "$NEXUS_USERNAME" --password-stdin
+    - docker build --pull --build-arg PIP_INDEX_URL="$PIP_INDEX_URL" --tag "$NEXUS_REGISTRY/marketmate:$CI_COMMIT_SHORT_SHA" --tag "$NEXUS_REGISTRY/marketmate:$CI_COMMIT_REF_SLUG" .
+    - docker push "$NEXUS_REGISTRY/marketmate:$CI_COMMIT_SHORT_SHA"
+    - docker push "$NEXUS_REGISTRY/marketmate:$CI_COMMIT_REF_SLUG"
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
