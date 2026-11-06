@@ -5,8 +5,8 @@ services:
       args:
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple/}
     image: marketmate:local
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
       APP_NAME: ${APP_NAME:-MarketMate}
       APP_ENV: ${APP_ENV:-development}
@@ -23,3 +23,14 @@ services:
     restart: unless-stopped
     mem_limit: 256m
     cpus: 0.5
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8090:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
