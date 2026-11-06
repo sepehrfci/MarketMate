@@ -1,6 +1,8 @@
 stages:
   - test
   - build
+  - security
+  # - deploy # Enable when a staging or production server is available.
 
 variables:
   PIP_INDEX_URL: "https://pypi.org/simple"
@@ -32,3 +34,108 @@ build-and-push:
     - docker push "$DOCKERHUB_IMAGE:$CI_COMMIT_REF_SLUG"
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+trivy-image-scan:
+  stage: security
+  image:
+    name: aquasec/trivy:0.76.2
+    entrypoint: [""]
+  variables:
+    TRIVY_NO_PROGRESS: "true"
+    TRIVY_CACHE_DIR: "$CI_PROJECT_DIR/.trivycache"
+  cache:
+    key: trivy-cache
+    paths:
+      - .trivycache/
+  script:
+    - echo "$DOCKERHUB_TOKEN" | trivy registry login --username "$DOCKERHUB_USERNAME" --password-stdin docker.io
+    - trivy image --scanners vuln --ignore-unfixed --severity CRITICAL --exit-code 1 "$DOCKERHUB_IMAGE:$CI_COMMIT_SHORT_SHA"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+# Deployment jobs are intentionally disabled because this project has no deployment server yet.
+# Uncomment the deploy stage above and the block below when staging/production hosts are ready.
+# Configure STAGING_HOST, STAGING_USER, STAGING_PATH, PRODUCTION_HOST,
+# PRODUCTION_USER, PRODUCTION_PATH, SSH_PRIVATE_KEY, and SSH_KNOWN_HOSTS in GitLab CI/CD variables.
+#
+# .deploy-template:
+#   stage: deploy
+#   image: alpine:3.22
+#   before_script:
+#     - apk add --no-cache openssh-client
+#     - ': "${DOCKERHUB_IMAGE:?Set DOCKERHUB_IMAGE in GitLab CI/CD variables}"'
+#     - ': "${SSH_PRIVATE_KEY:?Set SSH_PRIVATE_KEY as a file variable}"'
+#     - ': "${SSH_KNOWN_HOSTS:?Set SSH_KNOWN_HOSTS as a file variable}"'
+#     - ': "${TARGET_HOST:?Set the deployment host variable}"'
+#     - ': "${TARGET_USER:?Set the deployment user variable}"'
+#     - ': "${TARGET_PATH:?Set the project path on the deployment host}"'
+#     - chmod 600 "$SSH_PRIVATE_KEY"
+#   script:
+#     - >-
+#       ssh -i "$SSH_PRIVATE_KEY"
+#       -o UserKnownHostsFile="$SSH_KNOWN_HOSTS"
+#       -o StrictHostKeyChecking=yes
+#       "$TARGET_USER@$TARGET_HOST"
+#       "cd '$TARGET_PATH' &&
+#       DOCKERHUB_IMAGE='$DOCKERHUB_IMAGE' IMAGE_TAG='$CI_COMMIT_SHORT_SHA' docker compose pull app &&
+#       DOCKERHUB_IMAGE='$DOCKERHUB_IMAGE' IMAGE_TAG='$CI_COMMIT_SHORT_SHA' docker compose up -d --no-deps app"
+#
+# deploy-staging:
+#   extends: .deploy-template
+#   variables:
+#     TARGET_HOST: "$STAGING_HOST"
+#     TARGET_USER: "$STAGING_USER"
+#     TARGET_PATH: "$STAGING_PATH"
+#   environment:
+#     name: staging
+#   resource_group: marketmate-staging
+#   rules:
+#     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+#       when: manual
+#     - when: never
+#
+# deploy-production:
+#   extends: .deploy-template
+#   needs:
+#     - deploy-staging
+#   variables:
+#     TARGET_HOST: "$PRODUCTION_HOST"
+#     TARGET_USER: "$PRODUCTION_USER"
+#     TARGET_PATH: "$PRODUCTION_PATH"
+#   environment:
+#     name: production
+#   resource_group: marketmate-production
+#   rules:
+#     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+#       when: manual
+#     - when: never
+#
+# rollback-production:
+#   stage: deploy
+#   image: alpine:3.22
+#   before_script:
+#     - apk add --no-cache openssh-client
+#     - ': "${DOCKERHUB_IMAGE:?Set DOCKERHUB_IMAGE in GitLab CI/CD variables}"'
+#     - ': "${SSH_PRIVATE_KEY:?Set SSH_PRIVATE_KEY as a file variable}"'
+#     - ': "${SSH_KNOWN_HOSTS:?Set SSH_KNOWN_HOSTS as a file variable}"'
+#     - ': "${PRODUCTION_HOST:?Set PRODUCTION_HOST in GitLab CI/CD variables}"'
+#     - ': "${PRODUCTION_USER:?Set PRODUCTION_USER in GitLab CI/CD variables}"'
+#     - ': "${PRODUCTION_PATH:?Set PRODUCTION_PATH in GitLab CI/CD variables}"'
+#     - ': "${ROLLBACK_IMAGE_TAG:?Run this job with ROLLBACK_IMAGE_TAG set to a known-good commit SHA}"'
+#     - chmod 600 "$SSH_PRIVATE_KEY"
+#   script:
+#     - >-
+#       ssh -i "$SSH_PRIVATE_KEY"
+#       -o UserKnownHostsFile="$SSH_KNOWN_HOSTS"
+#       -o StrictHostKeyChecking=yes
+#       "$PRODUCTION_USER@$PRODUCTION_HOST"
+#       "cd '$PRODUCTION_PATH' &&
+#       DOCKERHUB_IMAGE='$DOCKERHUB_IMAGE' IMAGE_TAG='$ROLLBACK_IMAGE_TAG' docker compose pull app &&
+#       DOCKERHUB_IMAGE='$DOCKERHUB_IMAGE' IMAGE_TAG='$ROLLBACK_IMAGE_TAG' docker compose up -d --no-deps app"
+#   environment:
+#     name: production
+#   resource_group: marketmate-production
+#   rules:
+#     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+#       when: manual
+#     - when: never
