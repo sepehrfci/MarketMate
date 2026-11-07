@@ -6,6 +6,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
 app = FastAPI(title="MarketMate")
 app_name = os.getenv("APP_NAME", "MarketMate")
 app_env = os.getenv("APP_ENV", "development")
+KNOWN_HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
 http_requests = Counter(
     "marketmate_http_requests",
     "Number of HTTP requests handled by MarketMate",
@@ -16,7 +17,10 @@ http_requests = Counter(
 @app.middleware("http")
 async def count_requests(request: Request, call_next):
     response = await call_next(request)
-    http_requests.labels(request.method, request.url.path).inc()
+    route = request.scope.get("route")
+    route_path = getattr(route, "path", "unmatched")
+    method = request.method if request.method in KNOWN_HTTP_METHODS else "OTHER"
+    http_requests.labels(method, route_path).inc()
     return response
 
 

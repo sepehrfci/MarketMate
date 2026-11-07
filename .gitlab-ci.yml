@@ -2,6 +2,7 @@ stages:
   - test
   - build
   - security
+  - publish
   # - deploy # Enable when a staging or production server is available.
 
 variables:
@@ -18,20 +19,19 @@ test:
     - python -m pip install --no-cache-dir -r requirements-dev.txt
     - python -m pytest -q
 
-build-and-push:
+build-image:
   stage: build
   image: docker:27.5.1-cli
   services:
     - name: docker:27.5.1-dind
       alias: docker
   script:
-    - ': "${DOCKERHUB_USERNAME:?Set DOCKERHUB_USERNAME in GitLab CI/CD variables}"'
-    - ': "${DOCKERHUB_TOKEN:?Set DOCKERHUB_TOKEN in GitLab CI/CD variables}"'
-    - ': "${DOCKERHUB_IMAGE:?Set DOCKERHUB_IMAGE as namespace/repository in GitLab CI/CD variables}"'
-    - echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
-    - docker build --pull --build-arg PIP_INDEX_URL="$PIP_INDEX_URL" --tag "$DOCKERHUB_IMAGE:$CI_COMMIT_SHORT_SHA" --tag "$DOCKERHUB_IMAGE:$CI_COMMIT_REF_SLUG" .
-    - docker push "$DOCKERHUB_IMAGE:$CI_COMMIT_SHORT_SHA"
-    - docker push "$DOCKERHUB_IMAGE:$CI_COMMIT_REF_SLUG"
+    - docker build --pull --build-arg PIP_INDEX_URL="$PIP_INDEX_URL" --tag "marketmate:$CI_COMMIT_SHORT_SHA" .
+    - docker save "marketmate:$CI_COMMIT_SHORT_SHA" --output marketmate-image.tar
+  artifacts:
+    paths:
+      - marketmate-image.tar
+    expire_in: 2 hours
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 
@@ -47,9 +47,35 @@ trivy-image-scan:
     key: trivy-cache
     paths:
       - .trivycache/
+  needs:
+    - job: build-image
+      artifacts: true
   script:
-    - echo "$DOCKERHUB_TOKEN" | trivy registry login --username "$DOCKERHUB_USERNAME" --password-stdin docker.io
-    - trivy image --scanners vuln --ignore-unfixed --severity CRITICAL --exit-code 1 "$DOCKERHUB_IMAGE:$CI_COMMIT_SHORT_SHA"
+    - trivy image --input marketmate-image.tar --scanners vuln --ignore-unfixed --severity CRITICAL --exit-code 1
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+publish-image:
+  stage: publish
+  image: docker:27.5.1-cli
+  services:
+    - name: docker:27.5.1-dind
+      alias: docker
+  needs:
+    - job: build-image
+      artifacts: true
+    - job: trivy-image-scan
+      artifacts: false
+  script:
+    - ': "${DOCKERHUB_USERNAME:?Set DOCKERHUB_USERNAME in GitLab CI/CD variables}"'
+    - ': "${DOCKERHUB_TOKEN:?Set DOCKERHUB_TOKEN in GitLab CI/CD variables}"'
+    - ': "${DOCKERHUB_IMAGE:?Set DOCKERHUB_IMAGE as namespace/repository in GitLab CI/CD variables}"'
+    - docker load --input marketmate-image.tar
+    - docker tag "marketmate:$CI_COMMIT_SHORT_SHA" "$DOCKERHUB_IMAGE:$CI_COMMIT_SHORT_SHA"
+    - docker tag "marketmate:$CI_COMMIT_SHORT_SHA" "$DOCKERHUB_IMAGE:$CI_COMMIT_REF_SLUG"
+    - echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+    - docker push "$DOCKERHUB_IMAGE:$CI_COMMIT_SHORT_SHA"
+    - docker push "$DOCKERHUB_IMAGE:$CI_COMMIT_REF_SLUG"
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 

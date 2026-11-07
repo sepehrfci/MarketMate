@@ -12,7 +12,7 @@ FastAPI sample service with Docker Compose, GitLab CI/CD, Prometheus, and Grafan
    docker compose up -d --pull always
    ```
 
-The app is available through Nginx at `http://localhost:8090`. Prometheus is at `http://localhost:9090` and Grafana at `http://localhost:3000`.
+The app is available through Nginx at `http://localhost:8090`. Prometheus is at `http://localhost:9090` and Grafana at `http://localhost:3000`. Prometheus and Grafana bind to host loopback; on a remote host, use an SSH tunnel or a secured reverse proxy to reach them.
 
 To update only the app to a particular published tag, run:
 
@@ -23,13 +23,13 @@ IMAGE_TAG=<image-tag> docker compose up -d --no-deps app
 
 ## CI/CD
 
-The pipeline runs tests, builds the Docker image, pushes both the commit SHA and branch tags to Docker Hub, then scans the published image with Trivy. It only builds and scans images on the default branch. The scan fails on fixable `CRITICAL` vulnerabilities, which prevents the manual deployment jobs from running. Trivy ignores vulnerabilities without an available fix to keep the release gate focused on actionable findings. Add these GitLab CI/CD variables:
+The pipeline runs tests, builds an image archive, scans it with Trivy, and pushes the commit SHA and branch tags to Docker Hub only if the scan passes. It only builds and scans images on the default branch. The scan fails on fixable `CRITICAL` vulnerabilities; vulnerabilities without an available fix are ignored. Add these GitLab CI/CD variables:
 
 - `DOCKERHUB_USERNAME`: Docker Hub username.
 - `DOCKERHUB_TOKEN`: Docker Hub access token with permission to push to the image repository; mask it.
 - `DOCKERHUB_IMAGE`: image name in `namespace/repository` form.
 
-The Docker Hub image may be public or private; the pipeline logs in with the same Docker Hub credentials before scanning. Review Trivy's findings in the `trivy-image-scan` job log. Fix a finding in the base image or application dependencies, then push a new commit to run the scan again.
+The Docker Hub image may be public or private; the pipeline logs in before pushing. Review Trivy's findings in the `trivy-image-scan` job log. Fix a finding in the base image or application dependencies, then push a new commit to run the scan again.
 
 Deployment jobs are commented out because this project does not have a staging or production server yet. When a server is available, uncomment the deploy stage and job block in `.gitlab-ci.yml`, then configure the following GitLab variables. Mark `SSH_PRIVATE_KEY` and `SSH_KNOWN_HOSTS` as **File** variables; protect the production values and production environment where appropriate.
 
@@ -40,13 +40,11 @@ Deployment jobs are commented out because this project does not have a staging o
 | `SSH_PRIVATE_KEY` | Private key that can SSH to the deployment hosts. |
 | `SSH_KNOWN_HOSTS` | Verified SSH host keys for the deployment hosts. |
 
-The deployment user needs permission to run Docker Compose. Each server must have this repository's Compose and Nginx/monitoring configuration files, a valid `.env` with `GRAFANA_ADMIN_PASSWORD`, and access to pull the Docker Hub image. The deployment job updates only the `app` service. Once enabled, staging is manual, and production is manual after staging succeeds.
-
-Production requires manually starting `deploy-production`. For an additional approval gate, protect the `production` environment in GitLab and restrict who may deploy to it. This sample does not assume that a staging or production server is already available.
+The deployment user needs permission to run Docker Compose. Each server must have this repository's Compose and Nginx/monitoring configuration files, a valid `.env` with `GRAFANA_ADMIN_PASSWORD`, and access to pull the Docker Hub image. Once enabled, staging is manual and production is manual after staging succeeds. Protect the `production` environment in GitLab to restrict who may deploy. Deployment remains disabled in this sample because no server is configured.
 
 ## Rollback
 
-Every image is pushed with the short commit SHA as an immutable tag. For a manual rollback after deployment is enabled, start the `rollback-production` job and provide `ROLLBACK_IMAGE_TAG` with the previous known-good commit SHA. The job pulls that image and updates only the app. A manual rollback from the production host can also be done by setting `IMAGE_TAG` to that SHA and running:
+Every published image is tagged with its short commit SHA. For a manual rollback after deployment is enabled, start the `rollback-production` job and provide `ROLLBACK_IMAGE_TAG` with the previous known-good commit SHA. The job pulls that image and updates only the app. A manual rollback from the production host can also be done by setting `IMAGE_TAG` to that SHA and running:
 
 ```bash
 docker compose pull app
